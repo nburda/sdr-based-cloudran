@@ -1,14 +1,13 @@
-%This class contains utility functions for the CloudRAN.
-
+% This class contains utility functions for the CloudRAN.
 classdef CloudRANUtils
     methods (Static)
-        %This method shows the given message with a timestamp.
+        % This method shows the given message with a timestamp.
         function dispMessage(msg)
             disp(datestr(now,'HH:MM:SS.FFF') + " - " + msg)
         end
         
-        %This method reads the configuration values from given the
-        %configuration file.
+        % This method reads the configuration values from given the
+        % configuration file.
         function value = getConfigValue(configPath, valueName)
             value = "";
             fid = fopen(configPath);
@@ -23,8 +22,63 @@ classdef CloudRANUtils
             fclose(fid);
         end
         
-        %Returns the first sequence in an array based on a given starting
-        %position (4095 being handled as the predecessor of 1).
+        % This method shows all used configuration values.
+        function showConfiguration(configPath)
+            width = 100;
+            borderwidth = 10;
+            fid = fopen(configPath);
+            fprintf(repelem('-', width));
+            if(contains(fileread(configPath), "Generation"))
+                fprintf("\n" + pad("Starting C-RAN Sender...", width, 'both'));
+            else
+                fprintf("\n" + pad("Starting C-RAN Receiver...", width, 'both'));
+            end
+
+            fprintf("\n\nUsed Configuration:\n");
+            
+            while ~feof(fid)
+                line = fgetl(fid); 
+                arg = extractBefore(line, "=");
+                value = extractAfter(line, "=");
+                fprintf("\n" + repelem(' ', borderwidth) + arg + pad(" - ", width/2-strlength(arg)-borderwidth, 'left') + pad(value, width/2-borderwidth, 'left'));               
+            end
+            fclose(fid);
+            fprintf("\n" + repelem('-', width) + "\n\n\n");
+        end
+        
+        % This method shows the execution times of the transmission.
+        function showExecutionTimes(isSender, completeTime, bytesProcessed, softwareControlFlowWaitTimes, tcpIpTimes, waveformProcessingTimes , sdrTimes)
+            width = 100;
+            borderwidth = 10;
+            fprintf("\n\n" + repelem('-', width))
+            if(isSender)
+                fprintf("\n" + pad("Shutting C-RAN Sender down...", width, 'both'))
+            else
+                fprintf("\n" + pad("Shutting C-RAN Receiver down...", width, 'both'))
+            end
+
+            fprintf("\n\nExecution Times:\n")
+            
+            fprintf("\n" + repelem(' ', borderwidth) + "Overall Execution" + pad(" - ", width/2-strlength("Overall Execution")-borderwidth, 'left') + pad(completeTime + " s", width/2-borderwidth, 'left'));
+            fprintf("\n" + repelem(' ', borderwidth) + "Bytes processed" + pad(" - ", width/2-strlength("Bytes processed")-borderwidth, 'left') + pad(bytesProcessed + " B", width/2-borderwidth, 'left'));
+            fprintf("\n" + repelem(' ', borderwidth) + "Data Rate" + pad(" - ", width/2-strlength("Data Rate")-borderwidth, 'left') + pad(round(((bytesProcessed/completeTime)/1000)*8, 1) + " kbit/s", width/2-borderwidth, 'left'));
+            
+            if(isSender)
+                fprintf("\n" + repelem(' ', borderwidth) + "Wait for CloudRAN Receiver" + pad(" - ", width/2-strlength("Wait for CloudRAN Receiver")-borderwidth, 'left') + pad(sum(softwareControlFlowWaitTimes) + " s", width/2-borderwidth, 'left'));
+                fprintf("\n" + repelem(' ', borderwidth) + "Receive Data from Server" + pad(" - ", width/2-strlength("Receive Data from Server")-borderwidth, 'left') + pad(sum(tcpIpTimes) + " s", width/2-borderwidth, 'left'));
+                fprintf("\n" + repelem(' ', borderwidth) + "Generate Waveform" + pad(" - ", width/2-strlength("Generate Waveform")-borderwidth, 'left') + pad(sum(waveformProcessingTimes) + " s", width/2-borderwidth, 'left'));
+                fprintf("\n" + repelem(' ', borderwidth) + "Send Waveform via SDR" + pad(" - ", width/2-strlength("Send Waveform via SDR")-borderwidth, 'left') + pad(sum(sdrTimes) + " s", width/2-borderwidth, 'left'));
+            else
+                fprintf("\n" + repelem(' ', borderwidth) + "Wait for CloudRAN Transmitter" + pad(" - ", width/2-strlength("Wait for CloudRAN Transmitter")-borderwidth, 'left') + pad(sum(softwareControlFlowWaitTimes) + " s", width/2-borderwidth, 'left'));
+                fprintf("\n" + repelem(' ', borderwidth) + "Send Data to Client" + pad(" - ", width/2-strlength("Send Data to Client")-borderwidth, 'left') + pad(sum(tcpIpTimes) + " s", width/2-borderwidth, 'left'));
+                fprintf("\n" + repelem(' ', borderwidth) + "Decode Waveform" + pad(" - ", width/2-strlength("Decode Waveform")-borderwidth, 'left') + pad(sum(waveformProcessingTimes) + " s", width/2-borderwidth, 'left'));
+                fprintf("\n" + repelem(' ', borderwidth) + "Receive Waveform via SDR" + pad(" - ", width/2-strlength("Receive Waveform via SDR")-borderwidth, 'left') + pad(sum(sdrTimes) + " s", width/2-borderwidth, 'left')); 
+            end
+            fprintf("\n" + repelem('-', width) +"\n")
+        end
+        
+        % This method returns the first sequence in an array based on a given starting
+        % position (4095 being handled as the predecessor of 1).
         function firstSequence = getFirstSequence(seqStart, seqNrs)
             seq = sort(seqNrs);
             s = find(seq==seqStart);
@@ -60,8 +114,8 @@ classdef CloudRANUtils
             firstSequence = nonzeros(firstSequence)';
         end
         
-        %Merges the Buffer containing newly received Packets with the
-        %already received Packets from earlier waveforms.
+        % This method merges the Buffer containing newly received Packets with the
+        % already received Packets from earlier waveforms.
         function [mergedPackets, mergedSeqNrs] = mergeReceivedPackets(packets, seqNrs, alreadyReceivedPackets)
             mapKeys = CloudRANUtils.flattenMapKeys(keys(alreadyReceivedPackets));
             mergedSeqNrs = sort([mapKeys, seqNrs]);
@@ -76,7 +130,8 @@ classdef CloudRANUtils
             end
         end
         
-        % Gets the packet keys of all resendable packets
+        % This method gets the packet keys of all resendable packets from
+        % the given packetMap.
         function packetKeys = getResendablePacketKeys(wavefromInds, packetMap, packetsPerWaveform)
             packetKeys = [];
             mapKeys = keys(packetMap);
@@ -85,7 +140,7 @@ classdef CloudRANUtils
             end
         end
         
-        %Flattens the given map keys into a single array.
+        % This method flattens the given map keys into a single array.
         function flattenedKeys = flattenMapKeys(keys)
             flattenedKeys = zeros(size(keys), 'int16');
             for ind=1:size(keys, 2)
@@ -94,21 +149,14 @@ classdef CloudRANUtils
             end
         end
         
-        %Removes trailing zeros.
+        % This method removes trailing zeros from a given array.
         function arr = removeTrailingZeros(arr)
             arr = arr(1:find(arr,1,'last'));
         end
         
-        %Shows and saves all revelant execution data for the sender.
+        % This method shows and saves all revelant execution data for the sender.
         function saveSenderExecutionTimes(parallelGeneration, completeSenderTime, bytesSent, softwareControlFlowSenderWaitTimes, tcpIpReceiverTimes, waveformGeneratorTimes, sdrSenderTimes)
-            CloudRANUtils.dispMessage("Execution Times:");
-            CloudRANUtils.dispMessage("Overall Execution                           - " + completeSenderTime + " s");
-            CloudRANUtils.dispMessage("Bytes processed                             - " + bytesSent + " B");
-            CloudRANUtils.dispMessage("Data Rate                                   - " + round(((bytesSent/completeSenderTime)/1000)*8, 1) + " kbit/s");
-            CloudRANUtils.dispMessage("Waiting for CloudRAN Receiver               - " + sum(softwareControlFlowSenderWaitTimes) + " s");
-            CloudRANUtils.dispMessage("Uploading IP Packets to CloudRAN            - " + sum(tcpIpReceiverTimes) + " s");
-            CloudRANUtils.dispMessage("Generating SDR Waveform                     - " + sum(waveformGeneratorTimes) + " s");
-            CloudRANUtils.dispMessage("Sending SDR Waveform                        - " + sum(sdrSenderTimes) + " s");
+            CloudRANUtils.showExecutionTimes(true, completeSenderTime, bytesSent, softwareControlFlowSenderWaitTimes, tcpIpReceiverTimes, waveformGeneratorTimes , sdrSenderTimes);
             
             if(parallelGeneration)
                 prefix = "Parallel";
@@ -123,29 +171,22 @@ classdef CloudRANUtils
             senderPlotValues{4} = sdrSenderTimes;
             
             if (parallelGeneration)
-                waveformGeneratorLabel = 'Generating SDR Waveform (Parallel)';
+                waveformGeneratorLabel = 'Generate Waveform (Parallel)';
             else
-                waveformGeneratorLabel = 'Generating SDR Waveform';
+                waveformGeneratorLabel = 'Generate Waveform';
             end
-            senderPlotLabels{1} = 'Waiting for CloudRAN Receiver';
-            senderPlotLabels{2} = 'Uploading IP Packets to CloudRAN';
+            senderPlotLabels{1} = 'Wait for CloudRAN Receiver';
+            senderPlotLabels{2} = 'Receive Data from Server';
             senderPlotLabels{3} = waveformGeneratorLabel;
-            senderPlotLabels{4} = 'Sending SDR Waveform';
+            senderPlotLabels{4} = 'Send Waveform via SDR';
             
             %Save plot data 
             save('SenderPlotData.mat','senderPlotTitle','senderPlotValues','senderPlotLabels', 'completeSenderTime', 'bytesSent');
         end
         
-        %Shows and saves all revelant execution data for the receiver.
+        % This method shows and saves all revelant execution data for the receiver.
         function saveReceiverExecutionTimes(parallelDecoding, completeReceiverTime, bytesReceived, softwareControlFlowReceiverWaitTimes, tcpIpSenderTimes, waveformDecoderTimes, sdrReceiverTimes)
-            CloudRANUtils.dispMessage("Execution Times:");
-            CloudRANUtils.dispMessage("Overall Execution                           - " + completeReceiverTime + " s");
-            CloudRANUtils.dispMessage("Bytes processed                             - " + bytesReceived + " B");
-            CloudRANUtils.dispMessage("Data Rate                                   - " + round(((bytesReceived/completeReceiverTime)/1000)*8, 1) + " kbit/s");
-            CloudRANUtils.dispMessage("Waiting for CloudRAN Transmitter            - " + sum(softwareControlFlowReceiverWaitTimes) + " s");
-            CloudRANUtils.dispMessage("Transmitting IP Packets from CloudRAN       - " + sum(tcpIpSenderTimes) + " s");
-            CloudRANUtils.dispMessage("Decoding SDR Waveform                       - " + sum(waveformDecoderTimes) + " s");
-            CloudRANUtils.dispMessage("Receiving SDR Waveform                      - " + sum(sdrReceiverTimes) + " s");  
+            CloudRANUtils.showExecutionTimes(false, completeReceiverTime, bytesReceived, softwareControlFlowReceiverWaitTimes, tcpIpSenderTimes, waveformDecoderTimes , sdrReceiverTimes);
             
             if(parallelDecoding)
                 prefix = "Parallel";
@@ -160,21 +201,21 @@ classdef CloudRANUtils
             receiverPlotValues{4} = sdrReceiverTimes;
             
             if (parallelDecoding)
-                waveformDecoderLabel = 'Decoding SDR Waveform (Parallel)';
+                waveformDecoderLabel = 'Decode Waveform (Parallel)';
             else
-                waveformDecoderLabel = 'Decoding SDR Waveform';
+                waveformDecoderLabel = 'Decode Waveform';
             end
             
-            receiverPlotLabels{1} = 'Waiting for CloudRAN Transmitter';
-            receiverPlotLabels{2} = 'Transmitting IP Packets from CloudRAN';
+            receiverPlotLabels{1} = 'Wait for CloudRAN Transmitter';
+            receiverPlotLabels{2} = 'Send Data to Client';
             receiverPlotLabels{3} = waveformDecoderLabel;
-            receiverPlotLabels{4} = 'Receiving SDR Waveform';
+            receiverPlotLabels{4} = 'Receive Waveform via SDR';
             
             %Save plot data 
             save('ReceiverPlotData.mat','receiverPlotTitle','receiverPlotValues','receiverPlotLabels', 'completeReceiverTime', 'bytesReceived');
         end
         
-        %Creates a Box plot from the given values and labels.
+        % This method creates a Box plot from the given values and labels.
         function createBoxPlot(plotTitle, plotValues, givenPlotLabels, executionTime, bytesProcessed)
             
             assert(size(plotValues, 2) == size(givenPlotLabels, 2));
@@ -202,7 +243,7 @@ classdef CloudRANUtils
             savefig("./figures/" + plotTitle +  " Box Plot.fig");
         end
         
-        %Creates a Pie chart from the given values and labels.
+        % This method creates a Pie chart from the given values and labels.
         function createPieChart(plotTitle, plotValues, plotLabels, executionTime, bytesProcessed)
             
             assert(size(plotValues, 2) == size(plotLabels, 2));
@@ -230,7 +271,7 @@ classdef CloudRANUtils
             savefig("./figures/" + plotTitle +  " Pie Chart.fig");
         end
         
-        %Creates a Stacked Area chart from the given values and labels.
+        % This method creates a Stacked Area chart from the given values and labels.
         function createStackedAreaChart(plotTitle, plotValues, plotLabels, executionTime, bytesProcessed)
             
             assert(size(plotValues, 2) == size(plotLabels, 2));
@@ -268,7 +309,7 @@ classdef CloudRANUtils
             savefig("./figures/" + plotTitle +  " Stacked Area.fig");
         end
         
-        %Creates a Bar chart from the given values and labels.
+        % This method creates a Bar chart from the given values and labels.
         function createBarChart(plotTitle, plotValues, plotLabels, executionTime, bytesProcessed)
             
             assert(size(plotValues, 2) == size(plotLabels, 2));
@@ -294,8 +335,8 @@ classdef CloudRANUtils
             savefig("./figures/" + plotTitle +  " Bar Chart.fig");
         end
         
-        %Merges the plotdata from multiple given files and displays the
-        %result as a Bar chart.
+        % This method merges the plotdata from multiple given files and displays the
+        % result as a Bar chart.
         function mergePlotData(arrOfInputFiles)
             senderData = {};
             receiverData = {};

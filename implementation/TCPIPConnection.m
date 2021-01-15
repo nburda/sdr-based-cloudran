@@ -1,9 +1,10 @@
 % This class provides all necessary functions for the tcpip connection to the server and
 % client instances.
 
-classdef TcpIpConnection
+classdef TCPIPConnection
     methods (Static)
         
+        % This method creates a TCPIP socket with the given arguments.
         function tcpIpSocket = createTcpIpSocket(ipAdress, port, isServer, capacity)
             if isServer
                 tcpIpSocket = tcpip(ipAdress, port, 'NetworkRole', 'server', 'Timeout', 0.1);
@@ -28,8 +29,8 @@ classdef TcpIpConnection
             CloudRANUtils.dispMessage("Connected to " + ipAdress + ":" + int2str(port));
         end
         
-        %Extracts all sendable Packets and sends them via the tcpIpClient.
-        %All decoded by not sendable Packets are saved within a Map.
+        % This method extracts all sendable packets and sends them via the tcpIpClient.
+        % All decoded but not sendable packets are saved within a Map.
         function [expectedStartSeqNr, previouslyRemaingingPackets, bytesProcessed] = extractAndSendData(cloudranConfig, sdrConfig, tcpIpClient, expectedStartSeqNr, receivedSeqNrs, receivedPackets, previouslyRemaingingPackets)
             sendableSeqNrs = CloudRANUtils.getFirstSequence(expectedStartSeqNr, receivedSeqNrs);
             dataToSend = zeros(1,size(sendableSeqNrs, 2)*sdrConfig.msduLength, 'int8');
@@ -40,7 +41,7 @@ classdef TcpIpConnection
             bytesProcessed = size(dataToSend, 1);
             if(~isempty(sendableSeqNrs) && expectedStartSeqNr == sendableSeqNrs(1))
                 expectedStartSeqNr = mod(sendableSeqNrs(end), 4095)+1;
-                TcpIpConnection.sendDataFromTcpIpClient(tcpIpClient, dataToSend);
+                TCPIPConnection.sendDataFromTcpIpClient(tcpIpClient, dataToSend);
                 remainingPacketSeqNrs = cell2mat(keys(previouslyRemaingingPackets));
                 for ind=1:size(sendableSeqNrs, 2)
                     if(ismember(sendableSeqNrs(ind), remainingPacketSeqNrs))
@@ -58,7 +59,7 @@ classdef TcpIpConnection
             end
         end
         
-        % Send data to tcpIpClientIP:tcpIpClientPort.
+        % This method sends the given data via a given tcpIpClient.
         function sendDataFromTcpIpClient(tcpIpClient, data)
             CloudRANUtils.dispMessage("Sending Data ... ");
             while ~isempty(data)
@@ -67,21 +68,21 @@ classdef TcpIpConnection
             end
         end
         
-        % Receive data from tcpIpServerIP:tcpIpServerPort and save it in
+        % This method receives data from a given tcpIpServer and saves it in
         % receiverAsyncBuffer.
         function receiverAsyncBuffer = getDataFromTcpIpServer( ...
                 connectionTimeout, tcpIpServer, receiverAsyncBuffer)
             
-            curTcpIpConnectionTimeOut = 0;
+            curTCPIPConnectionTimeOut = 0;
             while strcmp(tcpIpServer.Status, 'open') && ...
-                    curTcpIpConnectionTimeOut < connectionTimeout
+                    curTCPIPConnectionTimeOut < connectionTimeout
                 if tcpIpServer.BytesAvailable == 0
-                    curTcpIpConnectionTimeOut = curTcpIpConnectionTimeOut+1;
+                    curTCPIPConnectionTimeOut = curTCPIPConnectionTimeOut+1;
                     pause(0.01);
                     continue;
                 end
 
-                curTcpIpConnectionTimeOut = 0;
+                curTCPIPConnectionTimeOut = 0;
                 
                 tcpIpData = fread(tcpIpServer, double(min(tcpIpServer.BytesAvailable, ...
                     (receiverAsyncBuffer.Capacity - receiverAsyncBuffer.NumUnreadSamples))));

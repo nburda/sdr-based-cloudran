@@ -3,7 +3,7 @@
 
 classdef WaveformUtils
     methods (Static) 
-        %Generate a waveform frame for the given data.
+        % This method generates a waveform frame for the given data.
         function [waveformFrame, apepLength] = generateWaveformFrame(data, seqNum, VHTcfg)    
 
             % Create MAC frame configuration object and configure sequence number
@@ -14,6 +14,8 @@ classdef WaveformUtils
             [waveformFrame, apepLength] = wlanMACFrame(data, cfgMAC, VHTcfg, 'OutputFormat', 'bits');
         end
         
+        % This method adjusts the packet offset using a coarse frequency
+        % estimation.
         function [pktOffset, coarseFreqOffset] = adjustPacketOffset(LSTF, pktOffset, chanBW, sr)
             
             % Coarse frequency offset estimation using L-STF
@@ -26,6 +28,7 @@ classdef WaveformUtils
             pktOffset = pktOffset+wlanSymbolTimingEstimate(LSTF,chanBW);
         end
         
+        % This method detects the format of the given packet.
         function [fmt, noiseVarNonHT, demodLLTF, chanEstLLTF, rxLSIG] = detectFormat(VHTcfg, vht, chanBW, sr)
 
             indLLTF = wlanFieldIndices(VHTcfg,'L-LTF');
@@ -55,9 +58,9 @@ classdef WaveformUtils
             catch
                 fmt = 'Null';
             end
-            CloudRANUtils.dispMessage(fmt + " format detected");
         end
         
+        % This method recovers the packet data from a given packet.
         function [rxPSDU, rxSIGBCRC, refSIGBCRC] = recoverPacketData(cfgVHTRx, rxWaveform, pktOffset, demodLLTF, chanBW)
             % Obtain starting and ending indices for VHT-LTF and VHT-Data fields
             % using retrieved packet parameters
@@ -73,7 +76,6 @@ classdef WaveformUtils
             noiseVarVHT = helperNoiseEstimate(demodLLTF, chanBW, cfgVHTRx.NumSpaceTimeStreams);
 
             % VHT-SIG-B Recover
-            CloudRANUtils.dispMessage("Decoding VHT-SIG-B...");
             [rxSIGBBits, ~] = wlanVHTSIGBRecover(rxWaveform(pktOffset + (indVHTSIGB(1):indVHTSIGB(2)),:), ...
                 chanEstVHTLTF, noiseVarVHT, chanBW);
 
@@ -92,7 +94,6 @@ classdef WaveformUtils
 
             % Recover PSDU bits using retrieved packet parameters and channel
             % estimates from VHT-LTF
-            CloudRANUtils.dispMessage("Decoding VHT Data field...");
             [rxPSDU, rxSIGBCRC, ~] = wlanVHTDataRecover(vhtdata, chanEstVHTLTF, noiseVarVHT, cfgVHTRx);
         end
     end

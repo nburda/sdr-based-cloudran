@@ -3,7 +3,7 @@
 classdef SoftwareFlowControl
     methods (Static)    
         
-        %Sends an out of band blockacknowledgement containing the given sequencenumbers.
+        % This method sends an out of band blockacknowledgement containing the given sequencenumbers.
         function sendSignal(tcpIpSender, signal, waveformInds, seqNrs)
             if exist('waveformInds', 'var') && exist('seqNrs', 'var')
                 fwrite(tcpIpSender, num2str([signal -1 waveformInds -1 seqNrs]), 'char');
@@ -12,7 +12,7 @@ classdef SoftwareFlowControl
             end
         end
         
-        %Waits until a signal is received via tcpip.
+        % This method waits until a signal is received via TCPIP.
         function [signal, waveformInds, seqNrs] = waitForSignal(tcpIpReceiver)
             while 1
                 if tcpIpReceiver.BytesAvailable ~= 0

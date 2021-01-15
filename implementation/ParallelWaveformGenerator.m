@@ -4,7 +4,7 @@
 classdef ParallelWaveformGenerator
     methods (Static)
         
-        %Generate a waveform using parallel worker threads.
+        % This method generates a waveform using parallel worker threads.
         function [waveform, unacknowledgedPacketsMap] = generateWaveform(config, waveformInd, seqNrOffset, packets, unacknowledgedPacketsMap, resendablePacketKeys)
             
             % Configuration for VHTWaveform
@@ -54,7 +54,7 @@ classdef ParallelWaveformGenerator
             waveform = ParallelWaveformGenerator.mergeWaveform(config, VHTcfg, [oldResults; newResults]);
         end
         
-        %Merge all waveform frames together into a single waveform.
+        % This method merges all waveform frames together into a single waveform.
         function txWaveform = mergeWaveform(config, VHTcfg, waveformFrames)
             
             %Merge all WLANMACFrames together
@@ -74,29 +74,12 @@ classdef ParallelWaveformGenerator
             
             txWaveform  = resample(txWaveform,fs*osf,fs);
             
-            bb_res_waveform_sz = size(txWaveform,1) * 4;
-            
-            time = ((0:length(txWaveform)-1)/(fs*osf))*1e6;
-            
-            if (config.GUI)
-                plot(time, abs(txWaveform))
-                xlabel ('Time (microseconds)');
-                ylabel('Magnitude');
-            end
-            
-            waveform_duration_sec = max(time) / 1e6;
-            waveform_data_rate = bb_res_waveform_sz * (1/waveform_duration_sec) * 8;
-            
-            CloudRANUtils.dispMessage("Generated WLAN transmit waveform of " + ...
-                waveform_duration_sec + " sec, rate " + waveform_data_rate/1e9 + ...
-                " Gbps");
-            
             % Scale the normalized signal to avoid saturation of RF stages
             powerScaleFactor = 0.8;
             txWaveform = txWaveform.*(1/max(abs(txWaveform))*powerScaleFactor);
         end
         
-        %Decode a given waveform using parallel worker threads.
+        % This method decodes a given waveform using parallel worker threads.
         function [packets, packetSeqNrs] = decodeWaveform(config, waveform)
             
             %Extract parameters        
@@ -151,9 +134,6 @@ classdef ParallelWaveformGenerator
                 % Adjust packet offset
                 pktOffset = searchOffset+pktOffset;
                 if isempty(pktOffset) || (pktOffset+indLSIG(2)>rxWaveformLen)
-                    if pktInd==1
-                        CloudRANUtils.dispMessage("** No packet detected **");
-                    end
                     break;
                 end
                 
@@ -166,44 +146,33 @@ classdef ParallelWaveformGenerator
                 end
                 
                 if (pktOffset + minPktLen) > rxWaveformLen
-                    CloudRANUtils.dispMessage("** Not enough samples to recover packet **");
                     searchOffset = pktOffset+1.5*lstfLen;
                     continue;
                 end
 
                 % Timing synchronization complete: packet detected
-                CloudRANUtils.dispMessage("Packet detected at index " + pktOffset);
                 [fmt, noiseVarNonHT, demodLLTF, chanEstLLTF, rxLSIG] = WaveformUtils.detectFormat(VHTcfg, helperFrequencyOffset(waveform(pktOffset+(1:7*Ns),:),sr,-coarseFreqOffset), chanBW, sr);
                 
                 if ~strcmp(fmt,'VHT')
-                    CloudRANUtils.dispMessage("A format other than VHT has been detected");
                     searchOffset = pktOffset+1.5*lstfLen;
                     continue;
                 end
                 
                 % Recover L-SIG field bits
-                CloudRANUtils.dispMessage("Decoding L-SIG... ");
                 [rxLSIGBits, failCheck, ~] = wlanLSIGRecover(rxLSIG, chanEstLLTF, noiseVarNonHT, chanBW);
 
                 if failCheck % Skip L-STF length of samples and continue searching
-                    CloudRANUtils.dispMessage("** L-SIG check fail **");
                     searchOffset = pktOffset+1.5*lstfLen;
                     continue;
-                else
-                    CloudRANUtils.dispMessage("L-SIG check pass");
                 end
                 
                 % Recover VHT-SIG-A field bits
-                CloudRANUtils.dispMessage("Decoding VHT-SIG-A... ");
                 [rxSIGABits, failCRC, ~] = wlanVHTSIGARecover(waveform(pktOffset + (indSIGA(1):indSIGA(2)), :), ...
                     chanEstLLTF, noiseVarNonHT, chanBW);
 
                 if failCRC
-                    CloudRANUtils.dispMessage("** VHT-SIG-A CRC fail **");
                     searchOffset = pktOffset+1.5*lstfLen;
                     continue;
-                else
-                    CloudRANUtils.dispMessage("VHT-SIG-A CRC pass");
                 end
 
                 % Create a VHT format configuration object by retrieving packet parameters
@@ -218,7 +187,6 @@ classdef ParallelWaveformGenerator
 
                 % Warn if waveform does not contain whole packet
                 if (pktOffset + double(indVHTData(2))) > rxWaveformLen
-                    CloudRANUtils.dispMessage("** Not enough samples to recover entire packet **");
                     searchOffset = pktOffset+1.5*lstfLen;
                     continue;
                 end
@@ -231,7 +199,6 @@ classdef ParallelWaveformGenerator
                 noiseVarVHT = helperNoiseEstimate(demodLLTF, chanBW, cfgVHTRx.NumSpaceTimeStreams);
 
                 % VHT-SIG-B Recover
-                CloudRANUtils.dispMessage("Decoding VHT-SIG-B...");
                 [rxSIGBBits, ~] = wlanVHTSIGBRecover(waveform(pktOffset + (indVHTSIGB(1):indVHTSIGB(2)),:), ...
                     chanEstVHTLTF, noiseVarVHT, chanBW);
 
@@ -263,12 +230,6 @@ classdef ParallelWaveformGenerator
                         continue;
                     end
                     packets{packetSeqNr} = packet;
-                    
-                    % Display decoded information
-                    if config.displayFlag
-                         CloudRANUtils.dispMessage("  Decoded MAC Sequence Control field contents:");
-                         CloudRANUtils.dispMessage("    Sequence number:" + packetSeqNr);
-                    end
                     packetSeqNrs(ind) = packetSeqNr;
                 else
                     cancel(threads(ind));
@@ -278,7 +239,7 @@ classdef ParallelWaveformGenerator
             clear threads;
         end
         
-        %decodes a single waveform packet 
+        % This method decodes a single waveform packet.
         function [packet, packetSeqNr] = decodePacket(cfgVHTRx, sequenceNrQueue, pktInd, vhtdata, refSIGBCRC, chanEstSSPilots, chanEstVHTLTF)
             packet = zeros(0,1);
             packetSeqNr = -1;
@@ -288,30 +249,21 @@ classdef ParallelWaveformGenerator
 
             % Recover PSDU bits using retrieved packet parameters and channel
             % estimates from VHT-LTF
-            CloudRANUtils.dispMessage("Decoding VHT Data field...");
             [rxPSDU, rxSIGBCRC, ~] = wlanVHTDataRecover(vhtdata, chanEstVHTLTF, noiseVarVHT, cfgVHTRx);
 
             % Test VHT-SIG-B CRC from service bits within VHT Data against
             % reference calculated with VHT-SIG-B bits
             if ~isequal(refSIGBCRC, rxSIGBCRC)
-                CloudRANUtils.dispMessage("** VHT-SIG-B CRC fail **");
                 return;
-            else
-                CloudRANUtils.dispMessage("VHT-SIG-B CRC pass");
             end
 
             mpduList = wlanAMPDUDeaggregate(rxPSDU, cfgVHTRx);
-            CloudRANUtils.dispMessage("Number of MPDUs present in the A-MPDU: " + numel(mpduList));
 
             packetSeq = zeros(1, numel(mpduList), 'int16');
             for i = 1:numel(mpduList)
                 [macCfg, payload, decodeStatus] = wlanMPDUDecode(mpduList{i}, cfgVHTRx, ...
                                                                 'DataFormat', 'octets');
-                if strcmp(decodeStatus, 'FCSFailed')
-                    CloudRANUtils.dispMessage("** FCS failed for MPDU-" + i + " **");      
-                else
-                    CloudRANUtils.dispMessage("FCS passed for MPDU-" + i);
-
+                if ~strcmp(decodeStatus, 'FCSFailed')
                     % Store sequencing information
                     packetSeqNr = macCfg.SequenceNumber;
                     send(sequenceNrQueue, [pktInd, packetSeqNr]);

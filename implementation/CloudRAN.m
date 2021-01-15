@@ -1,8 +1,6 @@
 % This is the main class for the cloudran, which sends data from a server
 % via SDRs to a client.
 
-%TODO Add Overview of used configuration
-
 classdef CloudRAN
     properties (Constant)
         XOFF = 17
@@ -11,14 +9,15 @@ classdef CloudRAN
         TRANSMISSIONEND = 20
     end
     methods (Static)      
-        % Start the CloudRAN Sender, which receives data from a Server via 
-        % TcpIp and sends it to the SDR. 
+        % This method starts the CloudRAN Sender, which receives data from a Server via 
+        % TCPIP and sends it to the SDR. 
         function startSender()
             
             clear;
             
             %Configuration file path
             configPath = "./config/senderconfig.conf";
+            CloudRANUtils.showConfiguration(configPath)
             
             %Read configuration values
             cloudranConfig = CloudRANConfiguration.readConfigValues(configPath);
@@ -34,10 +33,10 @@ classdef CloudRAN
             receiverBufferCapacity = floor(sdrConfig.maxLengthOfWaveform/sdrConfig.lengthOfWaveformPerByte * cloudranConfig.dutyCycle);
             receiverAsyncBuffer = dsp.AsyncBuffer(receiverBufferCapacity);
             
-            %Initialize tcpIpConnections
-            tcpIpServer = TcpIpConnection.createTcpIpSocket(tcpIpConfig.tcpIpIP, tcpIpConfig.tcpIpPort, 1, receiverBufferCapacity);
-            softwareFlowControlSender = TcpIpConnection.createTcpIpSocket('127.0.0.1', 1236, 0, receiverBufferCapacity);
-            softwareFlowControlReceiver = TcpIpConnection.createTcpIpSocket('127.0.0.1', 1237, 1, receiverBufferCapacity);
+            %Initialize TCPIPConnections
+            tcpIpServer = TCPIPConnection.createTcpIpSocket(tcpIpConfig.tcpIpIP, tcpIpConfig.tcpIpPort, 1, receiverBufferCapacity);
+            softwareFlowControlSender = TCPIPConnection.createTcpIpSocket('127.0.0.1', 1236, 0, receiverBufferCapacity);
+            softwareFlowControlReceiver = TCPIPConnection.createTcpIpSocket('127.0.0.1', 1237, 1, receiverBufferCapacity);
             
             %Initialize arrays for time measurement
             softwareControlFlowSenderWaitTimes = [];
@@ -56,7 +55,7 @@ classdef CloudRAN
                 softwareControlFlowSenderWaitTimer = tic;
                 
                 %Dont wait for Acknowledgements when pregenerating
-                if(~cloudranConfig.pregenerateWaveform)
+                if(~cloudranConfig.pipelineProtocol)
                     %Send CloudRAN.XON signal and wait for CloudRAN.XOFF signal
                     CloudRANUtils.dispMessage("Waiting for XOFF signal...");
                     [signal, ackWaveformInds, ackSeqNrs] =  SoftwareFlowControl.waitForSignal(softwareFlowControlReceiver);
@@ -76,7 +75,7 @@ classdef CloudRAN
                 
                 %Check for end of transmission
                 if(tcpIpServer.BytesAvailable == 0 && unacknowledgedPackets.Count == 0 && receiverAsyncBuffer.NumUnreadSamples == 0)
-                    if(cloudranConfig.pregenerateWaveform)
+                    if(cloudranConfig.pipelineProtocol)
                         %Send CloudRAN.XON signal and wait for CloudRAN.XOFF signal
                         CloudRANUtils.dispMessage("Waiting for XOFF signal...");
                         [signal, ~, ~] =  SoftwareFlowControl.waitForSignal(softwareFlowControlReceiver);
@@ -96,7 +95,7 @@ classdef CloudRAN
                 
                 %Check if only Ack are missing
                 if(tcpIpServer.BytesAvailable == 0 && isempty(resendablePacketKeys) && receiverAsyncBuffer.NumUnreadSamples == 0)
-                    if(cloudranConfig.pregenerateWaveform)
+                    if(cloudranConfig.pipelineProtocol)
                         %Send CloudRAN.XON signal and wait for CloudRAN.XOFF signal
                         CloudRANUtils.dispMessage("Waiting for XOFF signal...");
                         [signal, ackWaveformInds, ackSeqNrs] =  SoftwareFlowControl.waitForSignal(softwareFlowControlReceiver);
@@ -118,9 +117,9 @@ classdef CloudRAN
                 softwareControlFlowSenderWaitTime = toc(softwareControlFlowSenderWaitTimer);
                 tcpIpReceiverTimer = tic;
                 
-                %Get data from TcpIpConnection
+                %Get data from TCPIPConnection
                 if(tcpIpServer.BytesAvailable > 0 && (receiverAsyncBuffer.Capacity - receiverAsyncBuffer.NumUnreadSamples) > 0)
-                    receiverAsyncBuffer = TcpIpConnection.getDataFromTcpIpServer(tcpIpConfig.tcpIpTimeout, tcpIpServer, receiverAsyncBuffer);
+                    receiverAsyncBuffer = TCPIPConnection.getDataFromTcpIpServer(tcpIpConfig.tcpIpTimeout, tcpIpServer, receiverAsyncBuffer);
                 end
                 
                 tcpIpReceiverTime = toc(tcpIpReceiverTimer); %#ok<*AGROW>
@@ -143,7 +142,7 @@ classdef CloudRAN
                 waveformGeneratorTime = toc(waveformGeneratorTimer);
                 
                 %Wait for Signal when pregenerating the waveform
-                if(cloudranConfig.pregenerateWaveform)
+                if(cloudranConfig.pipelineProtocol)
                     softwareControlFlowSenderWaitTimer = tic;
                     
                     %Send CloudRAN.XON signal and wait for CloudRAN.XOFF signal
@@ -192,7 +191,7 @@ classdef CloudRAN
                 release(sdrTransmitter);
             end
             
-            %Close TcpIpConnections
+            %Close TCPIPConnections
             fclose(tcpIpServer);
             fclose(softwareFlowControlSender);
             fclose(softwareFlowControlReceiver);
@@ -202,7 +201,7 @@ classdef CloudRAN
             CloudRANUtils.saveSenderExecutionTimes(cloudranConfig.parallelGeneration, completeSenderTime, bytesSent, softwareControlFlowSenderWaitTimes, tcpIpReceiverTimes, waveformGeneratorTimes, sdrSenderTimes);
         end
         
-        % Start the CloudRAN Receiver, which receives data from a SDR and
+        % This method starts the CloudRAN Receiver, which receives data from a SDR and
         % sends it to a Client via TcpIp.
         function startReceiver()
             
@@ -210,6 +209,7 @@ classdef CloudRAN
             
             %Configuration file path
             configPath = "./config/receiverconfig.conf";
+            CloudRANUtils.showConfiguration(configPath)
             
             %Read configuration values
             cloudranConfig = CloudRANConfiguration.readConfigValues(configPath);
@@ -221,11 +221,11 @@ classdef CloudRAN
                 parpool(cloudranConfig.parallelThreads);
             end
             
-            %Initialize tcpIpConnections
+            %Initialize TCPIPConnections
             tcpIpCapacity = floor(sdrConfig.maxLengthOfWaveform/sdrConfig.lengthOfWaveformPerByte);
-            tcpIpClient = TcpIpConnection.createTcpIpSocket(tcpIpConfig.tcpIpIP, tcpIpConfig.tcpIpPort, 0, tcpIpCapacity);
-            softwareFlowControlReceiver = TcpIpConnection.createTcpIpSocket('127.0.0.1', 1236, 1, tcpIpCapacity);
-            softwareFlowControlSender = TcpIpConnection.createTcpIpSocket('127.0.0.1', 1237, 0, tcpIpCapacity);
+            tcpIpClient = TCPIPConnection.createTcpIpSocket(tcpIpConfig.tcpIpIP, tcpIpConfig.tcpIpPort, 0, tcpIpCapacity);
+            softwareFlowControlReceiver = TCPIPConnection.createTcpIpSocket('127.0.0.1', 1236, 1, tcpIpCapacity);
+            softwareFlowControlSender = TCPIPConnection.createTcpIpSocket('127.0.0.1', 1237, 0, tcpIpCapacity);
             
             %Initialize arrays for time measurement
             softwareControlFlowReceiverWaitTimes = [];
@@ -295,7 +295,7 @@ classdef CloudRAN
                         tcpIpSenderTimer = tic;
                         
                         CloudRANUtils.dispMessage("Sending Data to Client...");
-                        [expectedStartSeqNr, previouslyRemaingingPackets, bytesProcessed] = TcpIpConnection.extractAndSendData(cloudranConfig, sdrConfig, tcpIpClient, expectedStartSeqNr, receivedSeqNrs, receivedPackets, previouslyRemaingingPackets);
+                        [expectedStartSeqNr, previouslyRemaingingPackets, bytesProcessed] = TCPIPConnection.extractAndSendData(cloudranConfig, sdrConfig, tcpIpClient, expectedStartSeqNr, receivedSeqNrs, receivedPackets, previouslyRemaingingPackets);
                         bytesReceived = bytesReceived + bytesProcessed;
                         
                         tcpIpSenderTime = tcpIpSenderTime + toc(tcpIpSenderTimer);
@@ -338,13 +338,16 @@ classdef CloudRAN
                 
                 %Decode waveform with selected Decoding Mode
                 CloudRANUtils.dispMessage("Decoding Waveform...");
-                if(~cloudranConfig.parallelDecoding || strcmp(cloudranConfig.parallelDecodingMode, "Packets"))
+                if(~cloudranConfig.parallelDecoding || strcmp(cloudranConfig.parallelDecodingMode, "Frame"))
                     if(cloudranConfig.parallelDecoding)
                         [receivedPackets, receivedSeqNrs] = ParallelWaveformGenerator.decodeWaveform(sdrConfig, receivedWaveform);
                     else
                         [receivedPackets, receivedSeqNrs] = WaveformGenerator.decodeWaveform(sdrConfig, receivedWaveform);
                     end
                     clear receivedWaveform;
+                    
+                    CloudRANUtils.dispMessage("Decoded Waveform: " + waveformInd);
+                    CloudRANUtils.dispMessage("Decoded SeqNrs: " + num2str(receivedSeqNrs));
                     
                     if(previouslyRemaingingPackets.Count ~= 0)
                         [receivedPackets, mergedSeqNrs] = CloudRANUtils.mergeReceivedPackets(receivedPackets, receivedSeqNrs, previouslyRemaingingPackets);
@@ -369,7 +372,7 @@ classdef CloudRAN
                     tcpIpSenderTimer = tic;
 
                     CloudRANUtils.dispMessage("Sending Data to Client...");
-                    [expectedStartSeqNr, previouslyRemaingingPackets, bytesProcessed] = TcpIpConnection.extractAndSendData(cloudranConfig, sdrConfig, tcpIpClient, expectedStartSeqNr, mergedSeqNrs, receivedPackets, previouslyRemaingingPackets);
+                    [expectedStartSeqNr, previouslyRemaingingPackets, bytesProcessed] = TCPIPConnection.extractAndSendData(cloudranConfig, sdrConfig, tcpIpClient, expectedStartSeqNr, mergedSeqNrs, receivedPackets, previouslyRemaingingPackets);
                     
                     bytesReceived = bytesReceived + bytesProcessed;
                     tcpIpSenderTime = toc(tcpIpSenderTimer);
@@ -389,6 +392,9 @@ classdef CloudRAN
                     finishedThreads = [];
                     for ind=1:size(threads, 2)
                         waveformDecoderTimer = tic;
+                        if strcmp(threads(ind).State, 'failed')
+                            error("Waveform Decoding Thread failed: " + threads(ind).Error);
+                        end
                         if ~strcmp(threads(ind).State, 'finished')
                             continue;
                         end
@@ -415,7 +421,7 @@ classdef CloudRAN
                         tcpIpSenderTimer = tic;
                         
                         CloudRANUtils.dispMessage("Sending Data to Client...");
-                        [expectedStartSeqNr, previouslyRemaingingPackets, bytesProcessed] = TcpIpConnection.extractAndSendData(cloudranConfig, sdrConfig, tcpIpClient, expectedStartSeqNr, receivedSeqNrs, receivedPackets, previouslyRemaingingPackets);
+                        [expectedStartSeqNr, previouslyRemaingingPackets, bytesProcessed] = TCPIPConnection.extractAndSendData(cloudranConfig, sdrConfig, tcpIpClient, expectedStartSeqNr, receivedSeqNrs, receivedPackets, previouslyRemaingingPackets);
                         bytesReceived = bytesReceived + bytesProcessed;
                         
                         tcpIpSenderTime = tcpIpSenderTime + toc(tcpIpSenderTimer);
@@ -443,7 +449,7 @@ classdef CloudRAN
                 clear receivedPackets;
             end           
             
-            %Close TcpIpConnections
+            %Close TCPIPConnections
             fclose(tcpIpClient);
             fclose(softwareFlowControlSender);
             fclose(softwareFlowControlReceiver);

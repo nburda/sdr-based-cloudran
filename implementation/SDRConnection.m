@@ -1,20 +1,9 @@
 % This class provides all necessary functions for the SDR connection.
 
 classdef SDRConnection
-    properties
-        sdrDeviceName
-        sdrIpAddress
-        channelBandwidth
-        oversamplingFactor {mustBeNumeric, mustBePositive}
-        centerFrequency {mustBeNumeric}
-        waveformPlayTime {mustBeNumeric}
-        txGain {mustBeNumeric}
-        maxWaveformLen {mustBeNumeric, mustBePositive}
-        GUI
-    end
     methods (Static)
         
-        % Send waveform via SDR.
+        % This method sends a given waveform via the SDR.
         function sdrTransmitter = transmitWaveform(config, waveform)
             VHTcfg = wlanVHTConfig;
             VHTcfg.ChannelBandwidth = config.channelBandwidth;
@@ -35,7 +24,7 @@ classdef SDRConnection
             sdrTransmitter.transmitRepeat(waveform);
         end
         
-        % Receive waveform via SDR.
+        % This method receives a waveform via the SDR.
         function waveform = receiveWaveform(config)
             VHTcfg = wlanVHTConfig;    
             VHTcfg.ChannelBandwidth = config.channelBandwidth;
@@ -54,19 +43,6 @@ classdef SDRConnection
             waveform = capture(sdrReceiver, requiredCaptureLength, 'Seconds');
             
             release(sdrReceiver);
-            
-            if (config.GUI && usejava('desktop'))
-                % Setup Spectrum viewer
-                spectrumScope = dsp.SpectrumAnalyzer( ...
-                    'SpectrumType',    'Power density', ...
-                    'SpectralAverages', 10, ...
-                    'YLimits',         [-130 -40], ...
-                    'Title',           'Received Baseband WLAN Signal Spectrum', ...
-                    'YLabel',          'Power spectral density');
-                
-                spectrumScope.SampleRate = sdrReceiver.BasebandSampleRate;
-                spectrumScope(waveform);
-            end
         end
     end
 end

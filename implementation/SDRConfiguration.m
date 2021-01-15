@@ -1,3 +1,5 @@
+% This class stores the configuration values which are related to the
+% SDR functionality.
 classdef SDRConfiguration
     properties
         sdrDeviceName
@@ -11,10 +13,10 @@ classdef SDRConfiguration
         idleTimeAfterEachPacket
         maxLengthOfWaveform
         lengthOfWaveformPerByte
-        GUI
-        displayFlag
     end
     methods (Static)
+        % This method reads all SDR related configuration values from a given
+        % config file.
         function config = readConfigValues(configPath)
             config = SDRConfiguration;
             config.sdrDeviceName = CloudRANUtils.getConfigValue(configPath, "sdrDeviceName");
@@ -28,8 +30,6 @@ classdef SDRConfiguration
             config.idleTimeAfterEachPacket = 20e-6;
             config.maxLengthOfWaveform = str2double(CloudRANUtils.getConfigValue(configPath, "maxLengthOfWaveform"));
             config.lengthOfWaveformPerByte = 0.000000167;
-            config.GUI = strcmp(CloudRANUtils.getConfigValue(configPath, "GUI"), "true");
-            config.displayFlag = strcmp(CloudRANUtils.getConfigValue(configPath, "displayFlag"), "true");
         end
     end
 end
