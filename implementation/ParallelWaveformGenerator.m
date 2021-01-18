@@ -33,7 +33,7 @@ classdef ParallelWaveformGenerator
                 apepLengths{ind} = waveformData{1};
                 oldResults{ind} = waveformData{2};
                 oldSeqNrSplit = split(resendablePacketKeys(ind), 'I');
-                unacknowledgedPacketsMap(string(strcat('W', num2str(waveformInd), 'I', oldSeqNrSplit{2}))) = oldResults{ind};
+                unacknowledgedPacketsMap(string(strcat('W', num2str(waveformInd), 'I', oldSeqNrSplit{2}))) = unacknowledgedPacketsMap(string(resendablePacketKeys(ind)));
             end
             if(~isempty(resendablePacketKeys))
                 remove(unacknowledgedPacketsMap, resendablePacketKeys);

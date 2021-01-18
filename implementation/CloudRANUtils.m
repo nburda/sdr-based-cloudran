@@ -131,12 +131,15 @@ classdef CloudRANUtils
         end
         
         % This method gets the packet keys of all resendable packets from
-        % the given packetMap.
-        function packetKeys = getResendablePacketKeys(wavefromInds, packetMap, packetsPerWaveform)
+        % the given packetMap, that should be sent in the next waveform.
+        function packetKeys = getResendablePacketKeys(waveformInds, packetMap, packetsPerWaveform)
             packetKeys = [];
             mapKeys = keys(packetMap);
-            for ind=1:min(size(wavefromInds, 2), packetsPerWaveform)
-                packetKeys = [packetKeys mapKeys(startsWith(mapKeys, "W"+wavefromInds(ind)+"I"))];
+            for ind=1:min(size(waveformInds, 2), packetsPerWaveform)
+                packetKeys = [packetKeys mapKeys(startsWith(mapKeys, "W"+waveformInds(ind)+"I"))];
+            end
+            if(size(packetKeys, 2) > packetsPerWaveform)
+                packetKeys = packetKeys(1:packetsPerWaveform);
             end
         end
         
