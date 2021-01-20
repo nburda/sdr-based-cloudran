@@ -24,7 +24,11 @@ classdef CloudRAN
             sdrConfig = SDRConfiguration.readConfigValues(configPath);
             tcpIpConfig = TCPIPConfiguration.readConfigValues(configPath);
             
-            %Create parpools if needed
+            %Create or Shutdown parpool if needed
+            if ((~cloudranConfig.parallelGeneration && ~isempty(gcp('nocreate'))) || ...
+                    (cloudranConfig.parallelGeneration && ~isempty(gcp('nocreate')) && gcp('nocreate').NumWorkers ~= cloudranConfig.parallelThreads))
+                delete(gcp('nocreate'))
+            end
             if (cloudranConfig.parallelGeneration && isempty(gcp('nocreate')))
                 parpool(cloudranConfig.parallelThreads);
             end
@@ -49,7 +53,7 @@ classdef CloudRAN
             unacknowledgedPackets = containers.Map('KeyType','char', 'ValueType','any');
             seqNrOffset = 0;
             waveformInd = 1;
-            ackWaveforms = zeros(0, 0, 'int16');
+            ackWaveforms = zeros(0, 0, 'int32');
             ackSeqNrs = zeros(0, 0, 'int16');
             while true                     
                 softwareControlFlowSenderWaitTimer = tic;
@@ -131,7 +135,7 @@ classdef CloudRAN
                 bytesSent = bytesSent + size(packets, 1);
                 
                 %Generate waveform
-                CloudRANUtils.dispMessage("Generating Waveform...");
+                CloudRANUtils.dispMessage("Generating Waveform " + waveformInd + "...");
                 if(cloudranConfig.parallelGeneration)                    
                     [totalWaveform, unacknowledgedPackets] = ParallelWaveformGenerator.generateWaveform(sdrConfig, waveformInd, seqNrOffset, packets, unacknowledgedPackets, resendablePacketKeys);
                 else
@@ -216,7 +220,11 @@ classdef CloudRAN
             sdrConfig = SDRConfiguration.readConfigValues(configPath);
             tcpIpConfig = TCPIPConfiguration.readConfigValues(configPath);
             
-            %Create parpools if needed
+            %Create/Shutdown parpool if needed
+            if ((~cloudranConfig.parallelDecoding && ~isempty(gcp('nocreate'))) || ...
+                    (cloudranConfig.parallelDecoding && ~isempty(gcp('nocreate')) && gcp('nocreate').NumWorkers ~= cloudranConfig.parallelThreads))
+                delete(gcp('nocreate'))
+            end
             if cloudranConfig.parallelDecoding && isempty(gcp('nocreate'))
                 parpool(cloudranConfig.parallelThreads);
             end

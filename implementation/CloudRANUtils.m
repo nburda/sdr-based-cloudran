@@ -135,7 +135,7 @@ classdef CloudRANUtils
         function packetKeys = getResendablePacketKeys(waveformInds, packetMap, packetsPerWaveform)
             packetKeys = [];
             mapKeys = keys(packetMap);
-            for ind=1:min(size(waveformInds, 2), packetsPerWaveform)
+            for ind=1:size(waveformInds, 2)
                 packetKeys = [packetKeys mapKeys(startsWith(mapKeys, "W"+waveformInds(ind)+"I"))];
             end
             if(size(packetKeys, 2) > packetsPerWaveform)

@@ -177,7 +177,12 @@ classdef ParallelWaveformGenerator
 
                 % Create a VHT format configuration object by retrieving packet parameters
                 % from the decoded L-SIG and VHT-SIG-A bits
-                cfgVHTRx = helperVHTConfigRecover(rxLSIGBits, rxSIGABits);
+                try
+                    cfgVHTRx = helperVHTConfigRecover(rxLSIGBits, rxSIGABits);
+                catch
+                    searchOffset = pktOffset+1.5*lstfLen;
+                    continue;
+                end
                 
                 % Obtain starting and ending indices for VHT-LTF and VHT-Data fields
                 % using retrieved packet parameters

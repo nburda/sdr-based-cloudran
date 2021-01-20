@@ -19,7 +19,7 @@ classdef SDRConnection
             sdrTransmitter.ChannelMapping = 2;
             
             CloudRANUtils.dispMessage(...
-                "Uploading waveform to SDR platform for TX");
+                "Uploading waveform to SDR platform for TX...");
             
             sdrTransmitter.transmitRepeat(waveform);
         end
@@ -38,7 +38,7 @@ classdef SDRConnection
             
             requiredCaptureLength = config.maxLengthOfWaveform * 2;
             
-            CloudRANUtils.dispMessage("Starting a new RF capture for " + requiredCaptureLength + "s.");
+            CloudRANUtils.dispMessage("Starting a new RF capture for " + requiredCaptureLength + "s...");
             
             waveform = capture(sdrReceiver, requiredCaptureLength, 'Seconds');
             

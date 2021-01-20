@@ -51,6 +51,9 @@ classdef WaveformUtils
 
             rxLSIG = vht((indLSIG(1):indLSIG(2)), :);
             
+            %disable warnings for failed L-SIG checks since missing
+            %packets should occur in a realistic transmission
+            warning('off','all')
             % Detect the format of the packet
             try 
                 fmt = wlanFormatDetect(vht((indLSIG(1):indSIGA(2)), :), ...
@@ -58,6 +61,7 @@ classdef WaveformUtils
             catch
                 fmt = 'Null';
             end
+            warning('on','all')
         end
         
         % This method recovers the packet data from a given packet.
