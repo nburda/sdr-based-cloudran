@@ -13,8 +13,10 @@ classdef ParallelWaveformGenerator
             VHTcfg.MCS = config.MCS;                  % Modulation: e.g. 6 for 64QAM Rate: 2/3
             VHTcfg.NumTransmitAntennas = 1;   % Number of transmit antenna
             
-            %Add pad zeros 
-            packets = [packets; zeros(config.msduLength-mod(length(packets),config.msduLength),1)];
+            %Add pad zeros
+            if(mod(length(packets),config.msduLength) ~= 0)
+                packets = [packets; zeros(config.msduLength-mod(length(packets),config.msduLength),1)];
+            end
             
             % Generate waveform frames
             numMSDUs = ceil(length(packets)/config.msduLength);
@@ -122,7 +124,12 @@ classdef ParallelWaveformGenerator
                 if ismember(seqNr, finishedSeqNrs)
                     duplicateSequenceNrDetected = 1;
                 end
+                %We disable warnings since the finishedSeqNrs var can 
+                %already be destroyed when a lingering thread tries 
+                %to access it via this function.
+                warning('off', 'all');
                 finishedSeqNrs(curPktInd) = seqNr;
+                warning('on', 'all');
             end
             
             pktInd = 1;
@@ -204,9 +211,13 @@ classdef ParallelWaveformGenerator
                 noiseVarVHT = helperNoiseEstimate(demodLLTF, chanBW, cfgVHTRx.NumSpaceTimeStreams);
 
                 % VHT-SIG-B Recover
-                [rxSIGBBits, ~] = wlanVHTSIGBRecover(waveform(pktOffset + (indVHTSIGB(1):indVHTSIGB(2)),:), ...
-                    chanEstVHTLTF, noiseVarVHT, chanBW);
-
+                try
+                    [rxSIGBBits, ~] = wlanVHTSIGBRecover(waveform(pktOffset + (indVHTSIGB(1):indVHTSIGB(2)),:), ...
+                        chanEstVHTLTF, noiseVarVHT, chanBW);
+                catch
+                    searchOffset = pktOffset+1.5*lstfLen;
+                    continue;
+                end
                 % Interpret VHT-SIG-B bits to recover the APEP length (rounded up to a
                 % multiple of four bytes) and generate reference CRC bits
                 [refSIGBCRC, ~] = helperInterpretSIGB(rxSIGBBits, chanBW, true);

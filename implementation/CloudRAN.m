@@ -65,14 +65,16 @@ classdef CloudRAN
                     [signal, ackWaveformInds, ackSeqNrs] =  SoftwareFlowControl.waitForSignal(softwareFlowControlReceiver);
                     ackWaveforms = [ackWaveforms, ackWaveformInds];
                     if ~(signal == CloudRAN.XOFF)
-                        error("Received invalid signal from flow control: " + signal);
+                        error("Received invalid signal from flow control: " + string(signal));
                     end
                 end
                 
                 %Remove acknowledged SeqNrs from map
+                warning('off', 'all');
                 for ind=1:size(ackSeqNrs, 2)
                     remove(unacknowledgedPackets, ackSeqNrs(ind));
                 end
+                warning('on', 'all');
 
                 resendablePacketKeys = CloudRANUtils.getResendablePacketKeys(ackWaveforms, unacknowledgedPackets, floor(ceil(receiverBufferCapacity/sdrConfig.msduLength) * cloudranConfig.dutyCycle));
                 CloudRANUtils.dispMessage("Resending " + size(resendablePacketKeys, 2) + " unacknowledged Packets...");
@@ -84,7 +86,7 @@ classdef CloudRAN
                         CloudRANUtils.dispMessage("Waiting for XOFF signal...");
                         [signal, ~, ~] =  SoftwareFlowControl.waitForSignal(softwareFlowControlReceiver);
                         if ~(signal == CloudRAN.XOFF)
-                            error("Received invalid signal from flow control: " + signal);
+                            error("Received invalid signal from flow control: " + string(signal));
                         end
                     end
                     SoftwareFlowControl.sendSignal(softwareFlowControlSender, CloudRAN.TRANSMISSIONEND);
@@ -105,7 +107,7 @@ classdef CloudRAN
                         [signal, ackWaveformInds, ackSeqNrs] =  SoftwareFlowControl.waitForSignal(softwareFlowControlReceiver);
                         ackWaveforms = [ackWaveforms, ackWaveformInds];
                         if ~(signal == CloudRAN.XOFF)
-                            error("Received invalid signal from flow control: " + signal);
+                            error("Received invalid signal from flow control: " + string(signal));
                         end
                     end
                     SoftwareFlowControl.sendSignal(softwareFlowControlSender, CloudRAN.NOMOREDATA);
@@ -127,10 +129,34 @@ classdef CloudRAN
                 end
                 
                 tcpIpReceiverTime = toc(tcpIpReceiverTimer); %#ok<*AGROW>
+                
+                % Check if Transmission has to be paused to wait for Acknowledges
+                if(isempty(resendablePacketKeys) && max(0, min(receiverAsyncBuffer.NumUnreadSamples - sdrConfig.msduLength*size(resendablePacketKeys, 2), sdrConfig.msduLength*CloudRANUtils.getNumberOfSendablePackets(seqNrOffset, [resendablePacketKeys keys(unacknowledgedPackets)]))) == 0)
+                    softwareControlFlowSenderWaitTimer = tic;
+                    
+                    if(cloudranConfig.pipelineProtocol)
+                        %Send CloudRAN.XON signal and wait for CloudRAN.XOFF signal
+                        CloudRANUtils.dispMessage("Waiting for XOFF signal...");
+                        [signal, ackWaveformInds, ackSeqNrs] =  SoftwareFlowControl.waitForSignal(softwareFlowControlReceiver);
+                        ackWaveforms = [ackWaveforms, ackWaveformInds];
+                        if ~(signal == CloudRAN.XOFF)
+                            error("Received invalid signal from flow control: " + string(signal));
+                        end
+                    end
+                    SoftwareFlowControl.sendSignal(softwareFlowControlSender, CloudRAN.NOMOREDATA);
+                    
+                    %Save Execution Times of Iteration
+                    softwareControlFlowSenderWaitTimes = [softwareControlFlowSenderWaitTimes (softwareControlFlowSenderWaitTime + toc(softwareControlFlowSenderWaitTimer))];
+                    tcpIpReceiverTimes = [tcpIpReceiverTimes tcpIpReceiverTime];
+                    waveformGeneratorTimes = [waveformGeneratorTimes 0];
+                    sdrSenderTimes = [sdrSenderTimes 0];
+                    continue;
+                end
+                
                 waveformGeneratorTimer = tic;
                 
                 %Extract packages from buffer
-                packets = read(receiverAsyncBuffer, max(0, receiverAsyncBuffer.NumUnreadSamples - sdrConfig.msduLength*size(resendablePacketKeys, 2)));
+                packets = read(receiverAsyncBuffer, max(0, min(receiverAsyncBuffer.NumUnreadSamples - sdrConfig.msduLength*size(resendablePacketKeys, 2), sdrConfig.msduLength*CloudRANUtils.getNumberOfSendablePackets(seqNrOffset, [resendablePacketKeys keys(unacknowledgedPackets)]))));
                 
                 bytesSent = bytesSent + size(packets, 1);
                 
@@ -154,7 +180,7 @@ classdef CloudRAN
                     [signal, ackWaveformInds, ackSeqNrs] =  SoftwareFlowControl.waitForSignal(softwareFlowControlReceiver);
                     ackWaveforms = [ackWaveforms, ackWaveformInds];
                     if ~(signal == CloudRAN.XOFF)
-                        error("Received invalid signal from flow control: " + signal);
+                        error("Received invalid signal from flow control: " + string(signal));
                     end
                     
                     softwareControlFlowSenderWaitTime = softwareControlFlowSenderWaitTime + toc(softwareControlFlowSenderWaitTimer);
@@ -243,7 +269,7 @@ classdef CloudRAN
             
             completeReceiverTimer = tic;
             expectedStartSeqNr = 1;
-            previouslyRemaingingPackets = containers.Map('KeyType','double', 'ValueType','any');
+            previouslyRemaingingPackets = containers.Map('KeyType','char', 'ValueType','any');
             
             %Send first Start signal
             softwareControlFlowReceiverWaitTimer = tic;
@@ -265,7 +291,7 @@ classdef CloudRAN
                     break;
                 end
                 if signal ~= CloudRAN.XON && signal ~= CloudRAN.NOMOREDATA
-                    error("Received invalid signal from flow control: " + signal);
+                    error("Received invalid signal from flow control: " + string(signal));
                 end
                 
                 softwareControlFlowReceiverWaitTime = softwareControlFlowReceiverWaitTime + toc(softwareControlFlowReceiverWaitTimer);
@@ -292,12 +318,10 @@ classdef CloudRAN
                             allReceivedSeqNrs = [allReceivedSeqNrs -1 receivedSeqNrs];
                         end
                         
+                        [receivedPackets, receivedSeqNrs] = CloudRANUtils.mergeReceivedPackets(waveformInd, receivedPackets, receivedSeqNrs, previouslyRemaingingPackets);
+                        
                         waveformInds(ind) = waveformInd; 
                         waveformInd = waveformInd+1;
-                        
-                        if(previouslyRemaingingPackets.Count ~= 0)
-                            [receivedPackets, receivedSeqNrs] = CloudRANUtils.mergeReceivedPackets(receivedPackets, receivedSeqNrs, previouslyRemaingingPackets);
-                        end
                         
                         waveformDecoderTime = waveformDecoderTime + toc(waveformDecoderTimer);
                         tcpIpSenderTimer = tic;
@@ -357,11 +381,8 @@ classdef CloudRAN
                     CloudRANUtils.dispMessage("Decoded Waveform: " + waveformInd);
                     CloudRANUtils.dispMessage("Decoded SeqNrs: " + num2str(receivedSeqNrs));
                     
-                    if(previouslyRemaingingPackets.Count ~= 0)
-                        [receivedPackets, mergedSeqNrs] = CloudRANUtils.mergeReceivedPackets(receivedPackets, receivedSeqNrs, previouslyRemaingingPackets);
-                    else
-                        mergedSeqNrs = receivedSeqNrs;
-                    end
+
+                    [receivedPackets, mergedSeqNrs] = CloudRANUtils.mergeReceivedPackets(waveformInd, receivedPackets, receivedSeqNrs, previouslyRemaingingPackets);
                     
                     waveformDecoderTime = toc(waveformDecoderTimer);
                     softwareControlFlowReceiverWaitTimer = tic;
@@ -418,12 +439,10 @@ classdef CloudRAN
                             allReceivedSeqNrs = [allReceivedSeqNrs -1 receivedSeqNrs];
                         end
                         
+                        [receivedPackets, receivedSeqNrs] = CloudRANUtils.mergeReceivedPackets(waveformInd, receivedPackets, receivedSeqNrs, previouslyRemaingingPackets);
+                        
                         waveformInds = [waveformInds waveformInd];
                         waveformInd = waveformInd+1;
-                        
-                        if(previouslyRemaingingPackets.Count ~= 0)
-                            [receivedPackets, receivedSeqNrs] = CloudRANUtils.mergeReceivedPackets(receivedPackets, receivedSeqNrs, previouslyRemaingingPackets);
-                        end
                         
                         waveformDecoderTime = waveformDecoderTime + toc(waveformDecoderTimer);
                         tcpIpSenderTimer = tic;

@@ -7,27 +7,28 @@ classdef WaveformGenerator
         % This method generates a waveform from the given packets.
         function [txWaveform, unacknowledgedPacketsMap] = generateWaveform(config, waveformInd,  seqNrOffset, packets, unacknowledgedPacketsMap, resendablePacketKeys)            
             
-            VHTcfg = wlanVHTConfig;
+            % Configuration for VHTWaveform
+            VHTcfg = wlanVHTConfig;         % Create packet configuration
             VHTcfg.ChannelBandwidth = config.channelBandwidth;
-            VHTcfg.MCS = config.MCS;
-            VHTcfg.NumTransmitAntennas = 1;
+            VHTcfg.MCS = config.MCS;                  % Modulation: e.g. 6 for 64QAM Rate: 2/3
+            VHTcfg.NumTransmitAntennas = 1;   % Number of transmit antenna
             
+            %Add pad zeros
+            if(mod(length(packets),config.msduLength) ~= 0)
+                packets = [packets; zeros(config.msduLength-mod(length(packets),config.msduLength),1)];
+            end
+            
+            % Generate waveform frames
             numMSDUs = ceil(length(packets)/config.msduLength);
             
-            packets = [packets; zeros(config.msduLength-mod(length(packets),config.msduLength),1)];
-            
-            % Divide input data stream into fragments (frames)
-            data = zeros(0, 0, 'int8');
-            
-            % size on MAC layer
-            mpdu_payload_sz = 0;
-            
-            %Get previous Packets
-            oldResults = zeros(0, 0, 'int8');
+            %Extract Payloads
+            apepLengths = cell(numMSDUs, 1);
+            oldResults = cell(size(resendablePacketKeys, 2), 1);
+            newResults = cell(numMSDUs, 1);
             for ind=1:size(resendablePacketKeys, 2)
                 waveformData = unacknowledgedPacketsMap(string(resendablePacketKeys(ind)));
-                VHTcfg.APEPLength  = waveformData{1};
-                oldResults = [oldResults; waveformData{2}];
+                apepLengths{ind} = waveformData{1};
+                oldResults{ind} = waveformData{2};
                 oldSeqNrSplit = split(resendablePacketKeys(ind), 'I');
                 unacknowledgedPacketsMap(string(strcat('W', num2str(waveformInd), 'I', oldSeqNrSplit{2}))) = unacknowledgedPacketsMap(string(resendablePacketKeys(ind)));
             end
@@ -36,37 +37,33 @@ classdef WaveformGenerator
             end
             
             for ind=1:numMSDUs
-                % Extract data (in octets) for each MPDU
-                frameBody = packets((ind-1)*config.msduLength+1:config.msduLength*ind,:);
-                
-                % Create MAC frame configuration object and configure sequence number
-                seqNr = 1 + mod((seqNrOffset+ind-1), 4095);
-                [waveformFrame, apepLength] = WaveformUtils.generateWaveformFrame(frameBody, seqNr, VHTcfg);
-                
-                VHTcfg.APEPLength  = apepLength;   % Set the APEP length
-                
-                % Concatenate PSDUs for waveform generation
-                data = [data; waveformFrame]; %#ok<*AGROW>
-                unacknowledgedPacketsMap(string(strcat('W', num2str(waveformInd), 'I', num2str(seqNr)))) = {apepLength, waveformFrame};
-                
-                mpdu_payload_sz = mpdu_payload_sz + apepLength;
+                frame = packets((ind-1)*config.msduLength+1:config.msduLength*ind);
+                [waveformFrame, apepLength] = WaveformUtils.generateWaveformFrame(frame, 1 + mod((seqNrOffset+ind-1), 4095), VHTcfg);
+                apepLengths{ind} = apepLength;
+                newResults{ind} = waveformFrame;
+                unacknowledgedPacketsMap(string(strcat('W', num2str(waveformInd), 'I', num2str(1 + mod((seqNrOffset+ind-1), 4095))))) = {apepLengths{ind} newResults{ind}};
             end
             
-            data = [oldResults; data];
+            VHTcfg.APEPLength = apepLengths{end};
             
-            % Initialize the scrambler with a random integer for each packet
-            numMSDUs = numMSDUs + floor(size(oldResults,1)/(config.msduLength*8));
+            waveformFrames = [oldResults; newResults];
+            
+            %Merge all WLANMACFrames together
+            data = zeros(1, size(waveformFrames,1) * VHTcfg.PSDULength*8, 'int8');
+            for ind=1:size(waveformFrames,1)
+                data(1+(ind-1)*VHTcfg.PSDULength*8:ind*VHTcfg.PSDULength*8) = waveformFrames{ind}';
+            end
             
             % Generate baseband VHT packets separated by idle time
-            txWaveform = wlanWaveformGenerator(data, VHTcfg, 'NumPackets',numMSDUs, ...
+            txWaveform = wlanWaveformGenerator(data',VHTcfg, 'NumPackets',size(waveformFrames,1), ...
                 'IdleTime',config.idleTimeAfterEachPacket, ...
-                'ScramblerInitialization',randi([1 127],numMSDUs,1));
+                'ScramblerInitialization',randi([1 127],size(waveformFrames,1),1));
             
             % Resample the transmit waveform at 30MHz
-            sr = wlanSampleRate(VHTcfg); % Transmit sample rate in MHz
+            fs = wlanSampleRate(VHTcfg); % Transmit sample rate in MHz
             osf = 1.5;                     % OverSampling factor
             
-            txWaveform  = resample(txWaveform,sr*osf,sr);            
+            txWaveform  = resample(txWaveform,fs*osf,fs);
             
             % Scale the normalized signal to avoid saturation of RF stages
             powerScaleFactor = 0.8;
@@ -166,7 +163,43 @@ classdef WaveformGenerator
                     continue;
                 end
                 
-                [rxPSDU, rxSIGBCRC, refSIGBCRC] = WaveformUtils.recoverPacketData(cfgVHTRx, rxWaveform, pktOffset, demodLLTF, chanBW);
+                % Obtain starting and ending indices for VHT-LTF and VHT-Data fields
+                % using retrieved packet parameters
+                indVHTLTF  = wlanFieldIndices(cfgVHTRx, 'VHT-LTF');
+                indVHTSIGB = wlanFieldIndices(cfgVHTRx, 'VHT-SIG-B');
+                indVHTData = wlanFieldIndices(cfgVHTRx, 'VHT-Data');
+
+                % Estimate MIMO channel using VHT-LTF and retrieved packet parameters
+                demodVHTLTF = wlanVHTLTFDemodulate(rxWaveform(pktOffset + (indVHTLTF(1):indVHTLTF(2)), :), cfgVHTRx);
+                chanEstVHTLTF = wlanVHTLTFChannelEstimate(demodVHTLTF, cfgVHTRx);
+
+                % Estimate noise power in VHT-SIG-B fields
+                noiseVarVHT = helperNoiseEstimate(demodLLTF, chanBW, cfgVHTRx.NumSpaceTimeStreams);
+
+                % VHT-SIG-B Recover
+                try
+                    [rxSIGBBits, ~] = wlanVHTSIGBRecover(rxWaveform(pktOffset + (indVHTSIGB(1):indVHTSIGB(2)),:), ...
+                        chanEstVHTLTF, noiseVarVHT, chanBW);
+                catch
+                    searchOffset = pktOffset+1.5*lstfLen;
+                    continue;
+                end
+                % Interpret VHT-SIG-B bits to recover the APEP length (rounded up to a
+                % multiple of four bytes) and generate reference CRC bits
+                [refSIGBCRC, ~] = helperInterpretSIGB(rxSIGBBits, chanBW, true);
+
+                % Get single stream channel estimate
+                chanEstSSPilots = vhtSingleStreamChannelEstimate(demodVHTLTF, cfgVHTRx);
+
+                % Extract VHT Data samples from the waveform
+                vhtdata = rxWaveform(pktOffset + (indVHTData(1):indVHTData(2)), :);
+
+                % Estimate the noise power in VHT data field
+                noiseVarVHT = vhtNoiseEstimate(vhtdata, chanEstSSPilots, cfgVHTRx);
+
+                % Recover PSDU bits using retrieved packet parameters and channel
+                % estimates from VHT-LTF
+                [rxPSDU, rxSIGBCRC, ~] = wlanVHTDataRecover(vhtdata, chanEstVHTLTF, noiseVarVHT, cfgVHTRx);
                 
                 % Test VHT-SIG-B CRC from service bits within VHT Data against
                 % reference calculated with VHT-SIG-B bits

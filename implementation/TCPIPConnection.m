@@ -30,31 +30,31 @@ classdef TCPIPConnection
         end
         
         % This method extracts all sendable packets and sends them via the tcpIpClient.
-        % All decoded but not sendable packets are saved within a Map.
-        function [expectedStartSeqNr, previouslyRemaingingPackets, bytesProcessed] = extractAndSendData(cloudranConfig, sdrConfig, tcpIpClient, expectedStartSeqNr, receivedSeqNrs, receivedPackets, previouslyRemaingingPackets)
-            sendableSeqNrs = CloudRANUtils.getFirstSequence(expectedStartSeqNr, receivedSeqNrs);
+        % All decoded but not sendable packets are saved within previouslyRemainingPackets.
+        function [expectedStartSeqNr, previouslyRemainingPackets, bytesProcessed] = extractAndSendData(cloudranConfig, sdrConfig, tcpIpClient, expectedStartSeqNr, receivedSeqNrs, receivedPackets, previouslyRemainingPackets)
+            sendableSeqNrs = CloudRANUtils.getSendableSeqNrs(expectedStartSeqNr, receivedSeqNrs, keys(receivedPackets));
             dataToSend = zeros(1,size(sendableSeqNrs, 2)*sdrConfig.msduLength, 'int8');
             for x=1:size(sendableSeqNrs, 2)
-                dataToSend(1+(x-1)*sdrConfig.msduLength:x*sdrConfig.msduLength) = receivedPackets{sendableSeqNrs(x)}';
+                dataToSend(1+(x-1)*sdrConfig.msduLength:x*sdrConfig.msduLength) = receivedPackets(sendableSeqNrs(x))';
             end
             dataToSend = nonzeros(dataToSend);
             bytesProcessed = size(dataToSend, 1);
-            if(~isempty(sendableSeqNrs) && expectedStartSeqNr == sendableSeqNrs(1))
-                expectedStartSeqNr = mod(sendableSeqNrs(end), 4095)+1;
+            if(~isempty(sendableSeqNrs))
+                lastSeq = split(sendableSeqNrs(end), "I");
+                expectedStartSeqNr = mod(str2double(lastSeq(2)), 4095)+1;
                 TCPIPConnection.sendDataFromTcpIpClient(tcpIpClient, dataToSend);
-                remainingPacketSeqNrs = cell2mat(keys(previouslyRemaingingPackets));
                 for ind=1:size(sendableSeqNrs, 2)
-                    if(ismember(sendableSeqNrs(ind), remainingPacketSeqNrs))
-                        remove(previouslyRemaingingPackets, sendableSeqNrs(ind));
+                    if(ismember(sendableSeqNrs(ind), keys(previouslyRemainingPackets)))
+                        remove(previouslyRemainingPackets, sendableSeqNrs(ind));
                     end
                 end
             else
-                sendableSeqNrs = [];
+                sendableSeqNrs = {};
             end
-            receivedSeqNrs = setdiff(receivedSeqNrs, sendableSeqNrs);
-            if(cloudranConfig.selectiveAck && ~isempty(receivedPackets))
+            receivedSeqNrs = setdiff(keys(receivedPackets), sendableSeqNrs);
+            if(cloudranConfig.selectiveAck)
                 for x=1:size(receivedSeqNrs, 2)
-                    previouslyRemaingingPackets(receivedSeqNrs(x)) = receivedPackets{receivedSeqNrs(x)};
+                    previouslyRemainingPackets(string(receivedSeqNrs(x))) = receivedPackets(string(receivedSeqNrs(x)));
                 end 
             end
         end

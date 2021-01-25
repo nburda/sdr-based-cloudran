@@ -81,7 +81,7 @@ classdef CloudRANUtils
         % position (4095 being handled as the predecessor of 1).
         function firstSequence = getFirstSequence(seqStart, seqNrs)
             seq = sort(seqNrs);
-            s = find(seq==seqStart);
+            s = find(seq==seqStart, 1);
             if (isempty(s))
                 firstSequence = zeros(0, 0,'int16');
                 return;
@@ -90,43 +90,58 @@ classdef CloudRANUtils
                 firstSequence = seq;
                 return;
             end
-            if(s+1 > size(seqNrs, 2))
-                firstSequence = zeros(1, 1,'int16');
-                firstSequence(1) = seq(s);
-                return;
-            end
             firstSequence = zeros(1, size(seqNrs, 2),'int16');
             firstSequence(1) = seq(s);
-            ind = 2;
-            while(seq(s)+1 == seq(s+1))
-                firstSequence(ind) = seq(s+1);
-                s = s+1;
+            seq(s) = [];
+            ind = 1;
+            s = find(seq==(1 + mod(firstSequence(ind), 4095)), 1);
+            while(~isempty(s))
                 ind = ind+1;
-                if(seq(s) == 4095 && seq(1) == 1)
-                    firstSequence(ind) = 1;
-                    s = 1;
-                    ind = ind+1;
-                end
-                if(s+1 > size(seqNrs, 2))
-                    break;
-                end
+                firstSequence(ind) = seq(s);
+                seq(s) = []; 
+                s = find(seq==(1 + mod(firstSequence(ind), 4095)), 1);
             end
             firstSequence = nonzeros(firstSequence)';
         end
         
         % This method merges the Buffer containing newly received Packets with the
         % already received Packets from earlier waveforms.
-        function [mergedPackets, mergedSeqNrs] = mergeReceivedPackets(packets, seqNrs, alreadyReceivedPackets)
-            mapKeys = CloudRANUtils.flattenMapKeys(keys(alreadyReceivedPackets));
-            mergedSeqNrs = sort([mapKeys, seqNrs]);
-            mergedPackets = cell(size(seqNrs, 2)+size(mapKeys,2), 1);
-            if(~isempty(seqNrs))
+        function [mergedPackets, mergedSeqNrs] = mergeReceivedPackets(waveformInd, packets, seqNrs, alreadyReceivedPackets)
+            if(alreadyReceivedPackets.Count == 0)
+                mergedSeqNrs = sort(seqNrs);
+                mergedPackets = containers.Map('KeyType','char', 'ValueType','any');
                 for ind = 1:size(seqNrs, 2)
-                    mergedPackets{seqNrs(ind)} = packets{seqNrs(ind)};
+                    mergedPackets("W" + string(waveformInd) + "I" + string(seqNrs(ind))) = packets{seqNrs(ind)};
                 end
+                return
             end
-            for ind = 1:size(mapKeys,2)
-                mergedPackets{mapKeys(ind)} = alreadyReceivedPackets(mapKeys(ind));
+            if(alreadyReceivedPackets.Count == 1)
+                s = split(keys(alreadyReceivedPackets), "I");
+                mapKeys = str2double(s(2));
+            else
+                s = split(keys(alreadyReceivedPackets), "I");
+                mapKeys = str2double(s(:,:,2));
+            end
+            mergedSeqNrs = sort([mapKeys, seqNrs]);
+            mergedPackets = containers.Map('KeyType','char', 'ValueType','any');
+            for ind = 1:size(seqNrs, 2)
+                mergedPackets("W" + string(waveformInd) + "I" + string(seqNrs(ind))) = packets{seqNrs(ind)};
+            end
+            packetIdentifier = keys(alreadyReceivedPackets);
+            for ind = 1:size(packetIdentifier,2)
+                mergedPackets(string(packetIdentifier(ind))) = alreadyReceivedPackets(string(packetIdentifier(ind)));
+            end
+        end
+        
+        % This method, checks which packets can be sent and returns their
+        % seqNrs.
+        function sendableSeqNrs = getSendableSeqNrs(expectedStartSeqNr, receivedSeqNrs, packetKeys)
+            firstSeq = CloudRANUtils.getFirstSequence(expectedStartSeqNr, receivedSeqNrs);
+            sendableSeqNrs = strings(1, size(firstSeq, 2));
+            for ind=1:size(firstSeq, 2)
+                sInd = find(endsWith(packetKeys,"I" + string(firstSeq(ind))), 1);
+                sendableSeqNrs(ind) = packetKeys(sInd);
+                packetKeys(sInd) = [];
             end
         end
         
@@ -140,6 +155,26 @@ classdef CloudRANUtils
             end
             if(size(packetKeys, 2) > packetsPerWaveform)
                 packetKeys = packetKeys(1:packetsPerWaveform);
+            end
+        end
+        
+        % This function calculates how many packets can be sent until a
+        % duplicate would occur (based on the resendable and unacknowledged Packets).
+        function sendablePackets = getNumberOfSendablePackets(seqNrOffset, resendablePacketKeys)
+            if(isempty(resendablePacketKeys))
+                sendablePackets = inf;
+                return;
+            end
+            sendablePackets = 0;
+            if(size(resendablePacketKeys, 2) == 1)
+                s = split(resendablePacketKeys, "I");
+                resendablePacketKeys = str2double(s(2));
+            else
+                s = split(resendablePacketKeys, "I");
+                resendablePacketKeys = str2double(s(:,:,2));
+            end
+            while(~ismember(1+mod(seqNrOffset+sendablePackets, 4095), resendablePacketKeys))
+                sendablePackets = sendablePackets + 1;
             end
         end
         
