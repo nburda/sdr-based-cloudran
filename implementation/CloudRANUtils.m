@@ -410,7 +410,7 @@ classdef CloudRANUtils
                 orderedPlotLabels = reordercats(orderedPlotLabels, senderLabels);
 
                 figure('Name','Pieplot');
-                bar(orderedPlotLabels, cell2mat(senderData));
+                bar(orderedPlotLabels, cell2mat(senderData)');
                 title("Sender Times");
                 ylabel('Time in Seconds');
                 annotation('textbox',[0.2 0.5 0.3 0.3],'String',executionTimes, 'FitBoxToText','on');
@@ -426,7 +426,7 @@ classdef CloudRANUtils
                 orderedPlotLabels = reordercats(orderedPlotLabels, receiverLabels);
 
                 figure('Name','Pieplot');
-                bar(orderedPlotLabels, cell2mat(receiverData));
+                bar(orderedPlotLabels, cell2mat(receiverData)');
                 title("Receiver Times");
                 ylabel('Time in Seconds');
                 annotation('textbox',[0.2 0.5 0.3 0.3],'String',executionTimes, 'FitBoxToText','on');
