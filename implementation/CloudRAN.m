@@ -76,7 +76,7 @@ classdef CloudRAN
                 end
                 warning('on', 'all');
 
-                resendablePacketKeys = CloudRANUtils.getResendablePacketKeys(ackWaveforms, unacknowledgedPackets, floor(ceil(receiverBufferCapacity/sdrConfig.msduLength) * cloudranConfig.dutyCycle));
+                resendablePacketKeys = CloudRANUtils.getResendablePacketKeys(ackWaveforms, unacknowledgedPackets, ceil(receiverBufferCapacity/sdrConfig.msduLength));
                 CloudRANUtils.dispMessage("Resending " + size(resendablePacketKeys, 2) + " unacknowledged Packets...");
                 
                 %Check for end of transmission
