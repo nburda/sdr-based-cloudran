@@ -9,6 +9,7 @@ First start a TCP/IP Client to receive the Data from the CloudRAN and save it in
 nc -l 127.0.0.1 1235 > output.txt
 ```
 Afterwards start both the CloudRAN Sender and the CloudRAN Receiver in separate MATLAB processes.
+
 CloudRAN Sender:
 ```MATLAB
 CloudRAN.startSender()
@@ -24,7 +25,7 @@ nc 127.0.0.1 1234 < input.txt
 
 ## Configuration
 
-The following tables show all configuration values, which can be adjusted in the corresponding config files, which are located inside the config folder.
+The following tables show all configuration values, which can be adjusted in the corresponding config files. These are located inside the config folder.
 
 ### CloudRAN Sender Configuration
 
@@ -41,7 +42,7 @@ The following tables show all configuration values, which can be adjusted in the
 | MCS | The modulation used when generating the waveform. | Integer according to MATLABs WLAN Configuration (https://www.mathworks.com/help/wlan/ref/wlanvhtconfig.html) |
 | msduLength | The length of an msdu. | Integer between 1 and 2304 |
 | channelBandwidth | The bandwidth that should be used for the transmission. | String, either CBW20, CBW40, CBW80 or CBW160 |
-| maxLengthOfWaveform | The maximum length of a single waveform. | Float |
+| maxLengthOfWaveform | The maximum length of a single waveform in seconds. | Float |
 
 ### CloudRAN Receiver Configuration
 
@@ -58,4 +59,4 @@ The following tables show all configuration values, which can be adjusted in the
 | MCS | The modulation used when generating the waveform. | Integer according to MATLABs WLAN Configuration (https://www.mathworks.com/help/wlan/ref/wlanvhtconfig.html) |
 | msduLength | The length of an msdu. | Integer between 1 and 2304 |
 | channelBandwidth | The bandwidth that should be used for the transmission. | String, either CBW20, CBW40, CBW80 or CBW160 |
-| maxLengthOfWaveform | The maximum length of a single waveform. | Float |
+| maxLengthOfWaveform | The maximum length of a single waveform in seconds. | Float |
