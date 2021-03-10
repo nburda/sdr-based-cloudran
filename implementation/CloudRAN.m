@@ -39,8 +39,8 @@ classdef CloudRAN
             
             %Initialize TCPIPConnections
             tcpIpServer = TCPIPConnection.createTcpIpSocket(tcpIpConfig.tcpIpIP, tcpIpConfig.tcpIpPort, 1, receiverBufferCapacity);
-            softwareFlowControlSender = TCPIPConnection.createTcpIpSocket('127.0.0.1', 1236, 0, receiverBufferCapacity);
-            softwareFlowControlReceiver = TCPIPConnection.createTcpIpSocket('127.0.0.1', 1237, 1, receiverBufferCapacity);
+            softwareFlowControlSenderSide = TCPIPConnection.createTcpIpSocket(tcpIpConfig.senderSoftwareFlowControlIP, tcpIpConfig.senderSoftwareFlowControlPort, 0, receiverBufferCapacity);
+            softwareFlowControlReceiverSide = TCPIPConnection.createTcpIpSocket(tcpIpConfig.receiverSoftwareFlowControlIP, tcpIpConfig.receiverSoftwareFlowControlPort, 1, receiverBufferCapacity);
             
             %Initialize arrays for time measurement
             softwareControlFlowSenderWaitTimes = [];
@@ -62,7 +62,7 @@ classdef CloudRAN
                 if(~cloudranConfig.pipelineProtocol)
                     %Send CloudRAN.XON signal and wait for CloudRAN.XOFF signal
                     CloudRANUtils.dispMessage("Waiting for XOFF signal...");
-                    [signal, ackWaveformInds, ackSeqNrs] =  SoftwareFlowControl.waitForSignal(softwareFlowControlReceiver);
+                    [signal, ackWaveformInds, ackSeqNrs] =  SoftwareFlowControl.waitForSignal(softwareFlowControlReceiverSide);
                     ackWaveforms = [ackWaveforms, ackWaveformInds];
                     if ~(signal == CloudRAN.XOFF)
                         error("Received invalid signal from flow control: " + string(signal));
@@ -84,12 +84,12 @@ classdef CloudRAN
                     if(cloudranConfig.pipelineProtocol)
                         %Send CloudRAN.XON signal and wait for CloudRAN.XOFF signal
                         CloudRANUtils.dispMessage("Waiting for XOFF signal...");
-                        [signal, ~, ~] =  SoftwareFlowControl.waitForSignal(softwareFlowControlReceiver);
+                        [signal, ~, ~] =  SoftwareFlowControl.waitForSignal(softwareFlowControlReceiverSide);
                         if ~(signal == CloudRAN.XOFF)
                             error("Received invalid signal from flow control: " + string(signal));
                         end
                     end
-                    SoftwareFlowControl.sendSignal(softwareFlowControlSender, CloudRAN.TRANSMISSIONEND);
+                    SoftwareFlowControl.sendSignal(softwareFlowControlSenderSide, CloudRAN.TRANSMISSIONEND);
                     
                     %Save Execution Times of Iteration
                     softwareControlFlowSenderWaitTimes = [softwareControlFlowSenderWaitTimes toc(softwareControlFlowSenderWaitTimer)];
@@ -104,13 +104,13 @@ classdef CloudRAN
                     if(cloudranConfig.pipelineProtocol)
                         %Send CloudRAN.XON signal and wait for CloudRAN.XOFF signal
                         CloudRANUtils.dispMessage("Waiting for XOFF signal...");
-                        [signal, ackWaveformInds, ackSeqNrs] =  SoftwareFlowControl.waitForSignal(softwareFlowControlReceiver);
+                        [signal, ackWaveformInds, ackSeqNrs] =  SoftwareFlowControl.waitForSignal(softwareFlowControlReceiverSide);
                         ackWaveforms = [ackWaveforms, ackWaveformInds];
                         if ~(signal == CloudRAN.XOFF)
                             error("Received invalid signal from flow control: " + string(signal));
                         end
                     end
-                    SoftwareFlowControl.sendSignal(softwareFlowControlSender, CloudRAN.NOMOREDATA);
+                    SoftwareFlowControl.sendSignal(softwareFlowControlSenderSide, CloudRAN.NOMOREDATA);
                     
                     %Save Execution Times of Iteration
                     softwareControlFlowSenderWaitTimes = [softwareControlFlowSenderWaitTimes toc(softwareControlFlowSenderWaitTimer)];
@@ -137,13 +137,13 @@ classdef CloudRAN
                     if(cloudranConfig.pipelineProtocol)
                         %Send CloudRAN.XON signal and wait for CloudRAN.XOFF signal
                         CloudRANUtils.dispMessage("Waiting for XOFF signal...");
-                        [signal, ackWaveformInds, ackSeqNrs] =  SoftwareFlowControl.waitForSignal(softwareFlowControlReceiver);
+                        [signal, ackWaveformInds, ackSeqNrs] =  SoftwareFlowControl.waitForSignal(softwareFlowControlReceiverSide);
                         ackWaveforms = [ackWaveforms, ackWaveformInds];
                         if ~(signal == CloudRAN.XOFF)
                             error("Received invalid signal from flow control: " + string(signal));
                         end
                     end
-                    SoftwareFlowControl.sendSignal(softwareFlowControlSender, CloudRAN.NOMOREDATA);
+                    SoftwareFlowControl.sendSignal(softwareFlowControlSenderSide, CloudRAN.NOMOREDATA);
                     
                     %Save Execution Times of Iteration
                     softwareControlFlowSenderWaitTimes = [softwareControlFlowSenderWaitTimes (softwareControlFlowSenderWaitTime + toc(softwareControlFlowSenderWaitTimer))];
@@ -177,7 +177,7 @@ classdef CloudRAN
                     
                     %Send CloudRAN.XON signal and wait for CloudRAN.XOFF signal
                     CloudRANUtils.dispMessage("Waiting for XOFF signal...");
-                    [signal, ackWaveformInds, ackSeqNrs] =  SoftwareFlowControl.waitForSignal(softwareFlowControlReceiver);
+                    [signal, ackWaveformInds, ackSeqNrs] =  SoftwareFlowControl.waitForSignal(softwareFlowControlReceiverSide);
                     ackWaveforms = [ackWaveforms, ackWaveformInds];
                     if ~(signal == CloudRAN.XOFF)
                         error("Received invalid signal from flow control: " + string(signal));
@@ -202,7 +202,7 @@ classdef CloudRAN
                 sdrSenderTime = toc(sdrSenderTimer);
                 softwareControlFlowSenderWaitTimer = tic;
 
-                SoftwareFlowControl.sendSignal(softwareFlowControlSender, CloudRAN.XON);
+                SoftwareFlowControl.sendSignal(softwareFlowControlSenderSide, CloudRAN.XON);
                 
                 softwareControlFlowSenderWaitTime = softwareControlFlowSenderWaitTime + toc(softwareControlFlowSenderWaitTimer);
                 
@@ -223,8 +223,8 @@ classdef CloudRAN
             
             %Close TCPIPConnections
             fclose(tcpIpServer);
-            fclose(softwareFlowControlSender);
-            fclose(softwareFlowControlReceiver);
+            fclose(softwareFlowControlSenderSide);
+            fclose(softwareFlowControlReceiverSide);
             
             %Save execution times
             completeSenderTime = toc(completeSenderTimer);
@@ -258,8 +258,8 @@ classdef CloudRAN
             %Initialize TCPIPConnections
             tcpIpCapacity = floor(sdrConfig.maxLengthOfWaveform/sdrConfig.lengthOfWaveformPerByte);
             tcpIpClient = TCPIPConnection.createTcpIpSocket(tcpIpConfig.tcpIpIP, tcpIpConfig.tcpIpPort, 0, tcpIpCapacity);
-            softwareFlowControlReceiver = TCPIPConnection.createTcpIpSocket('127.0.0.1', 1236, 1, tcpIpCapacity);
-            softwareFlowControlSender = TCPIPConnection.createTcpIpSocket('127.0.0.1', 1237, 0, tcpIpCapacity);
+            softwareFlowControlSenderSide = TCPIPConnection.createTcpIpSocket(tcpIpConfig.senderSoftwareFlowControlIP, tcpIpConfig.senderSoftwareFlowControlPort, 1, tcpIpCapacity);
+            softwareFlowControlReceiverSide = TCPIPConnection.createTcpIpSocket(tcpIpConfig.receiverSoftwareFlowControlIP, tcpIpConfig.receiverSoftwareFlowControlPort, 0, tcpIpCapacity);
             
             %Initialize arrays for time measurement
             softwareControlFlowReceiverWaitTimes = [];
@@ -274,7 +274,7 @@ classdef CloudRAN
             %Send first Start signal
             softwareControlFlowReceiverWaitTimer = tic;
             
-            SoftwareFlowControl.sendSignal(softwareFlowControlSender, CloudRAN.XOFF); 
+            SoftwareFlowControl.sendSignal(softwareFlowControlReceiverSide, CloudRAN.XOFF); 
             
             softwareControlFlowReceiverWaitTime = toc(softwareControlFlowReceiverWaitTimer);
             waveformInd = 1;
@@ -286,7 +286,7 @@ classdef CloudRAN
                 
                 %Wait for CloudRAN.XON signal
                 CloudRANUtils.dispMessage("Waiting for XON signal...");
-                signal = SoftwareFlowControl.waitForSignal(softwareFlowControlReceiver);
+                signal = SoftwareFlowControl.waitForSignal(softwareFlowControlSenderSide);
                 if(signal == CloudRAN.TRANSMISSIONEND)
                     break;
                 end
@@ -343,7 +343,7 @@ classdef CloudRAN
                     softwareControlFlowReceiverWaitTimer = tic;
 
                     %Send Acknowlege
-                    SoftwareFlowControl.sendSignal(softwareFlowControlSender, CloudRAN.XOFF, waveformInds, allReceivedSeqNrs); 
+                    SoftwareFlowControl.sendSignal(softwareFlowControlReceiverSide, CloudRAN.XOFF, waveformInds, allReceivedSeqNrs); 
                     CloudRANUtils.dispMessage("Acknowledging " + (size(allReceivedSeqNrs, 2)-sum(allReceivedSeqNrs == -1)) + " Packets...");
                     
                     softwareControlFlowReceiverWaitTime = softwareControlFlowReceiverWaitTime + toc(softwareControlFlowReceiverWaitTimer);
@@ -390,10 +390,10 @@ classdef CloudRAN
                     %Send Acknowlege
                     if(~cloudranConfig.selectiveAck)
                         ackSeqNrs = CloudRANUtils.getFirstSequence(expectedStartSeqNr, receivedSeqNrs);
-                        SoftwareFlowControl.sendSignal(softwareFlowControlSender, CloudRAN.XOFF, waveformInd, ackSeqNrs);
+                        SoftwareFlowControl.sendSignal(softwareFlowControlReceiverSide, CloudRAN.XOFF, waveformInd, ackSeqNrs);
                         CloudRANUtils.dispMessage("Acknowledging " + size(ackSeqNrs, 2) + " Packets...");
                     else
-                        SoftwareFlowControl.sendSignal(softwareFlowControlSender, CloudRAN.XOFF, waveformInd, receivedSeqNrs); 
+                        SoftwareFlowControl.sendSignal(softwareFlowControlReceiverSide, CloudRAN.XOFF, waveformInd, receivedSeqNrs); 
                         CloudRANUtils.dispMessage("Acknowledging " + size(receivedSeqNrs,2) + " Packets...");
                     end
                     
@@ -461,7 +461,7 @@ classdef CloudRAN
                     softwareControlFlowReceiverWaitTimer = tic;
 
                     %Send Acknowlege
-                    SoftwareFlowControl.sendSignal(softwareFlowControlSender, CloudRAN.XOFF, waveformInds, allReceivedSeqNrs);
+                    SoftwareFlowControl.sendSignal(softwareFlowControlReceiverSide, CloudRAN.XOFF, waveformInds, allReceivedSeqNrs);
                     CloudRANUtils.dispMessage("Acknowledging " + (size(allReceivedSeqNrs, 2)-sum(allReceivedSeqNrs == -1)) + " Packets...");
                     
                     softwareControlFlowReceiverWaitTime = softwareControlFlowReceiverWaitTime + toc(softwareControlFlowReceiverWaitTimer);
@@ -478,8 +478,8 @@ classdef CloudRAN
             
             %Close TCPIPConnections
             fclose(tcpIpClient);
-            fclose(softwareFlowControlSender);
-            fclose(softwareFlowControlReceiver);
+            fclose(softwareFlowControlReceiverSide);
+            fclose(softwareFlowControlSenderSide);
             
             %Save execution times
             completeReceiverTime = toc(completeReceiverTimer);
